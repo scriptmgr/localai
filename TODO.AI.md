@@ -17,3 +17,5 @@ pre-existing, not introduced by it) — tracked here per policy.
 - [ ] install.sh:177 — `grep -qi` missing `--` before query, use `grep -qi -- nvidia`
 - [ ] install.sh:309 — `grep -qi` missing `--` before query, use `grep -qi -- 'enabled'`
 - [ ] install.sh:156 — inline comment on code line, move above the `;;`
+- [ ] install.sh:178 — `grep -Eqi` missing `--` before query, use `grep -Eqi -- 'AMD|ATI|Advanced Micro Devices'`
+- [ ] install.sh:525 — inline comment on code line, move above

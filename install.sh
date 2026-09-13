@@ -14,7 +14,7 @@
 #   Reach the dashboards with an SSH tunnel, e.g.
 #     ssh -L 8080:DOCKER_GW:8080 root@server
 
-set -Eeuo pipefail
+set -Eeo pipefail
 
 # ---------------------------------------------------------------- configuration
 CREDS_FILE=${CREDS_FILE:-$HOME/.config/env/local-AI.sh}
@@ -777,23 +777,39 @@ ok "Ollama serving on ${OLLAMA_HOST}."
 # --------------------------------------------------------------- 6. OmniRoute
 if container_gone omniroute; then
   info "Deploying OmniRoute AI gateway on ${DOCKER_GW}:20128..."
+  # --env-file rather than a run of -e KEY=value for the secrets: with -e, each
+  # value is a literal `docker run` argument, so it shows up in `ps`/`/proc/<pid>/cmdline`
+  # for the life of that invocation and in anything that logs the executed
+  # command line. A file isn't - only its path is. (This does not hide the
+  # values from `docker inspect` or the container's own /proc/<pid>/environ;
+  # Docker bakes the resolved env into the container config either way -
+  # closing that would need OmniRoute to support file-based secrets or
+  # Swarm secrets, neither of which this single-node docker-run setup uses.)
+  # umask 077 is already active from the credentials step above, so this
+  # temp file is created mode 600; chmod is explicit for clarity.
+  OMNI_ENV_FILE=$(mktemp /tmp/omniroute-env-XXXXXX)
+  chmod 600 "$OMNI_ENV_FILE"
+  cat >"$OMNI_ENV_FILE" <<EOF
+PORT=20128
+HOSTNAME=0.0.0.0
+DATA_DIR=/app/data
+NODE_ENV=production
+API_KEY_SECRET=${OMNI_API_KEY_SECRET}
+JWT_SECRET=${OMNI_JWT_SECRET}
+STORAGE_ENCRYPTION_KEY=${OMNI_STORAGE_KEY}
+OMNIROUTE_WS_BRIDGE_SECRET=${OMNI_WS_BRIDGE_SECRET}
+INITIAL_PASSWORD=${OMNI_ADMIN_PASS}
+OMNIROUTE_ALLOW_PRIVATE_PROVIDER_URLS=true
+EOF
   docker run -d \
     --name omniroute \
     --restart unless-stopped \
     --stop-timeout 40 \
     -p "${DOCKER_GW}:20128:20128" \
-    -e PORT=20128 \
-    -e HOSTNAME=0.0.0.0 \
-    -e DATA_DIR=/app/data \
-    -e NODE_ENV=production \
-    -e API_KEY_SECRET="${OMNI_API_KEY_SECRET}" \
-    -e JWT_SECRET="${OMNI_JWT_SECRET}" \
-    -e STORAGE_ENCRYPTION_KEY="${OMNI_STORAGE_KEY}" \
-    -e OMNIROUTE_WS_BRIDGE_SECRET="${OMNI_WS_BRIDGE_SECRET}" \
-    -e INITIAL_PASSWORD="${OMNI_ADMIN_PASS}" \
-    -e OMNIROUTE_ALLOW_PRIVATE_PROVIDER_URLS=true \
+    --env-file "$OMNI_ENV_FILE" \
     -v omniroute-data:/app/data \
     diegosouzapw/omniroute:latest >/dev/null
+  rm -f "$OMNI_ENV_FILE"
   ok "OmniRoute started."
 else
   ok "OmniRoute already exists - leaving it alone."
