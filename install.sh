@@ -602,6 +602,11 @@ if ! modinfo xt_addrtype >/dev/null 2>&1; then
     info "xt_addrtype unavailable for ${KERNEL_RELEASE} - installing ${EXTRAS_PKG}..."
     if dnf install -y "$EXTRAS_PKG" >/dev/null 2>&1; then
       ok "${EXTRAS_PKG} installed."
+      # Docker was already started above and may have come up with a broken
+      # bridge if xt_addrtype was missing at that point - restart now that
+      # the module is available so the bridge network gets created correctly.
+      info "Restarting Docker to pick up xt_addrtype..."
+      systemctl restart docker
     else
       warn "could not install ${EXTRAS_PKG}. Docker's bridge network may fail to start;"
       warn "check: journalctl -u docker"
@@ -651,7 +656,14 @@ dnf install -y firewalld >/dev/null
 systemctl enable --now firewalld
 firewall-cmd --permanent --add-service=ssh >/dev/null
 
-DOCKER_ZONE=$(firewall-cmd --get-zone-of-interface=docker0 2>/dev/null || true)
+# The default bridge's interface is named docker0 unless daemon.json (or an
+# explicit bridge network option) overrides it - ask Docker rather than
+# assuming, so a renamed bridge still gets zoned correctly.
+DOCKER_BRIDGE_IFACE=$(docker network inspect bridge -f '{{index .Options "com.docker.network.bridge.name"}}' 2>/dev/null || true)
+if [ -z "$DOCKER_BRIDGE_IFACE" ]; then
+  DOCKER_BRIDGE_IFACE=docker0
+fi
+DOCKER_ZONE=$(firewall-cmd --get-zone-of-interface="$DOCKER_BRIDGE_IFACE" 2>/dev/null || true)
 if [ -z "$DOCKER_ZONE" ]; then
   DOCKER_ZONE=$(firewall-cmd --get-default-zone)
 fi
@@ -727,6 +739,10 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
+# ProtectSystem=full mounts /usr read-only; OLLAMA_MODELS lives under
+# /usr/share/ollama, so that one path needs an explicit carve-out or every
+# model pull fails with a permission error.
+ReadWritePaths=/usr/share/ollama
 
 [Install]
 WantedBy=multi-user.target
@@ -915,4 +931,3 @@ ${SERVICES}
  In this shell:  export OLLAMA_HOST=${DOCKER_GW}:${OLLAMA_PORT}
 ==========================================================================
 EOF
-
