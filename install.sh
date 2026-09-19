@@ -170,7 +170,7 @@ if ! have lspci; then
 fi
 GPU_PCI=""
 if have lspci; then
-  GPU_PCI=$(lspci -d ::03xx 2>/dev/null || true)   # PCI class 03xx = display controllers
+  GPU_PCI=$(llspci 2>/dev/null| grep -iE 'vga|3d|display'|| true)   # PCI class 03xx = display controllers
 fi
 PCI_NVIDIA=0
 PCI_AMD=0
@@ -455,6 +455,7 @@ fi
 
 # Available space on each distinct filesystem backing the two data paths.
 mkdir -p /var/lib/docker /usr/share/ollama
+chmod 777 /usr/share/ollama
 DISK_GB=$(df -BG --output=avail,target /var/lib/docker /usr/share/ollama 2>/dev/null \
           | tail -n +2 | sort -u -k2,2 | awk '{gsub(/G/,"",$1); s+=$1} END {printf "%d", s}')
 
