@@ -170,7 +170,7 @@ if ! have lspci; then
 fi
 GPU_PCI=""
 if have lspci; then
-  GPU_PCI=$(llspci 2>/dev/null| grep -iE 'vga|3d|display'|| true)   # PCI class 03xx = display controllers
+  GPU_PCI=$(lspci 2>/dev/null| grep -iE 'vga|3d|display'|| true)   # PCI class 03xx = display controllers
 fi
 PCI_NVIDIA=0
 PCI_AMD=0
